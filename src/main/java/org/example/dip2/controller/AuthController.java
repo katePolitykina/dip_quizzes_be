@@ -1,0 +1,39 @@
+package org.example.dip2.controller;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.example.dip2.dto.auth.AuthResponse;
+import org.example.dip2.dto.auth.GuestAuthRequest;
+import org.example.dip2.dto.auth.LoginRequest;
+import org.example.dip2.dto.auth.RegisterRequest;
+import org.example.dip2.service.AuthService;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/auth")
+@RequiredArgsConstructor
+public class AuthController {
+
+    private final AuthService authService;
+
+    @PostMapping("/register")
+    @ResponseStatus(HttpStatus.CREATED)
+    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
+        return authService.register(request);
+    }
+
+    @PostMapping("/login")
+    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
+        return authService.login(request);
+    }
+
+    @PostMapping("/guest")
+    public AuthResponse guest(@Valid @RequestBody GuestAuthRequest request) {
+        return authService.issueGuestToken(request);
+    }
+}

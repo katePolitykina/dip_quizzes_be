@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:dip2;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: create-drop
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: test-client
+            client-secret: test-secret
+  data:
+    redis:
+      repositories:
+        enabled: false
+
+app:
+  jwt:
+    secret: 12345678901234567890123456789012
+    access-token-expiration: PT2H
+    guest-token-expiration: PT30M
+  rooms:
+    ttl: PT2H
+    pin-length: 6
+    store: memory
+    lock-timeout: PT1S

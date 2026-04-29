@@ -1,0 +1,55 @@
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  application:
+    name: dip2
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/dip2}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: false
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - openid
+              - profile
+              - email
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      repositories:
+        enabled: false
+
+server:
+  error:
+    include-message: always
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:replace-this-with-a-long-32-byte-secret-key}
+    access-token-expiration: ${JWT_EXPIRATION:PT2H}
+    guest-token-expiration: PT4H
+  oauth:
+    frontend-success-redirect: ${FRONTEND_OAUTH_REDIRECT:http://localhost:5173/oauth2/callback}
+  rooms:
+    ttl: PT2H
+    pin-length: 6
+    store: ${ROOM_STORE:redis}
+    lock-timeout: PT5S
