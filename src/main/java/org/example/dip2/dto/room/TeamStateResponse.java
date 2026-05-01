@@ -11,6 +11,7 @@ public record TeamStateResponse(
         String confirmedConfidenceLevel,
         String selectedAnswerId,
         String confirmedAnswerId,
+        Boolean confirmedAnswerCorrect,
         double totalScore,
         boolean analystPowerUsed
 ) {

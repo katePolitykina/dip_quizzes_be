@@ -5,6 +5,7 @@ public record TeamAnswerEventPayload(
         String participantId,
         String selectedAnswerId,
         String confirmedAnswerId,
-        boolean finalized
+        boolean finalized,
+        Boolean confirmedCorrect
 ) {
 }

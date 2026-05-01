@@ -138,7 +138,7 @@ public class GameLoopService {
             roomRealtimeService.broadcastTeamSelection(
                     session.getPin(),
                     teamId,
-                    new TeamAnswerEventPayload(teamId, participant.getParticipantId(), team.getSelectedAnswerId(), team.getConfirmedAnswerId(), false)
+                    new TeamAnswerEventPayload(teamId, participant.getParticipantId(), team.getSelectedAnswerId(), team.getConfirmedAnswerId(), false, null)
             );
             return null;
         });
@@ -155,6 +155,11 @@ public class GameLoopService {
                 throw new ApiException(HttpStatus.FORBIDDEN, "Only the captain can confirm a team answer");
             }
             validateAnswerBelongsToQuestion(session, answerId);
+            boolean confirmedCorrect = currentQuestion(session).getAnswers().stream()
+                    .filter(answer -> answer.getId().equals(answerId))
+                    .findFirst()
+                    .map(QuestionAnswerState::isCorrect)
+                    .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Confirmed answer does not belong to current question"));
 
             team.setSelectedAnswerId(answerId);
             team.setConfirmedAnswerId(answerId);
@@ -167,7 +172,7 @@ public class GameLoopService {
             roomRealtimeService.broadcastTeamSelection(
                     session.getPin(),
                     teamId,
-                    new TeamAnswerEventPayload(teamId, participant.getParticipantId(), team.getSelectedAnswerId(), team.getConfirmedAnswerId(), true)
+                    new TeamAnswerEventPayload(teamId, participant.getParticipantId(), team.getSelectedAnswerId(), team.getConfirmedAnswerId(), true, confirmedCorrect)
             );
             roomRealtimeService.broadcastRoomEvent(
                     session.getPin(),

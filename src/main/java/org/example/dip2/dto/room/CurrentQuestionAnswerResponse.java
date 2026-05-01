@@ -2,6 +2,7 @@ package org.example.dip2.dto.room;
 
 public record CurrentQuestionAnswerResponse(
         String id,
-        String text
+        String text,
+        Boolean correct
 ) {
 }

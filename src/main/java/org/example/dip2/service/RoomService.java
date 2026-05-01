@@ -30,6 +30,7 @@ import org.example.dip2.room.GameSession;
 import org.example.dip2.room.GameSessionStore;
 import org.example.dip2.room.GameStatus;
 import org.example.dip2.room.PlayerSlot;
+import org.example.dip2.room.QuestionAnswerState;
 import org.example.dip2.room.QuestionState;
 import org.example.dip2.room.TeamRole;
 import org.example.dip2.room.TeamState;
@@ -422,10 +423,25 @@ public class RoomService {
                         team.getConfirmedConfidenceLevel() == null ? null : team.getConfirmedConfidenceLevel().name(),
                         team.getSelectedAnswerId(),
                         team.getConfirmedAnswerId(),
+                        resolveConfirmedAnswerCorrect(session, team),
                         team.getTotalScore(),
                         team.isAnalystPowerUsed()
                 )).toList()
         );
+    }
+
+    private Boolean resolveConfirmedAnswerCorrect(GameSession session, TeamState team) {
+        if (team.getConfirmedAnswerId() == null || session.getCurrentQuestionIndex() == null || session.getQuestions() == null) {
+            return null;
+        }
+        if (session.getCurrentQuestionIndex() < 0 || session.getCurrentQuestionIndex() >= session.getQuestions().size()) {
+            return null;
+        }
+        return session.getQuestions().get(session.getCurrentQuestionIndex()).getAnswers().stream()
+                .filter(answer -> answer.getId().equals(team.getConfirmedAnswerId()))
+                .findFirst()
+                .map(QuestionAnswerState::isCorrect)
+                .orElse(null);
     }
 
     public CbmSettings defaultCbmSettings() {
@@ -576,6 +592,7 @@ public class RoomService {
             return null;
         }
         QuestionState question = session.getQuestions().get(session.getCurrentQuestionIndex());
+        boolean revealCorrectAnswers = shouldRevealCorrectAnswers(session);
         return new CurrentQuestionResponse(
                 question.getId(),
                 question.getText(),
@@ -583,9 +600,21 @@ public class RoomService {
                 question.getBaseWeight(),
                 question.getTimerOverride(),
                 question.getAnswers().stream()
-                        .map(answer -> new CurrentQuestionAnswerResponse(answer.getId(), answer.getText()))
+                        .map(answer -> new CurrentQuestionAnswerResponse(
+                                answer.getId(),
+                                answer.getText(),
+                                revealCorrectAnswers ? answer.isCorrect() : null
+                        ))
                         .toList()
         );
+    }
+
+    private boolean shouldRevealCorrectAnswers(GameSession session) {
+        if (session.getStatus() == GameStatus.SHOW_RESULTS || session.getStatus() == GameStatus.FINISHED) {
+            return true;
+        }
+        return session.getStatus() == GameStatus.PAUSED
+                && (session.getStatusBeforePause() == GameStatus.SHOW_RESULTS || session.getStatusBeforePause() == GameStatus.FINISHED);
     }
 
     private FinalGameReportResponse toFinalReportResponse(FinalGameReport finalReport) {
