@@ -133,12 +133,15 @@ public class GameLoopService {
             ensureParticipantInTeam(team, participant);
             validateAnswerBelongsToQuestion(session, answerId);
 
-            team.setSelectedAnswerId(answerId);
+            participant.setSelectedAnswerId(answerId);
+            if (participant.getParticipantId().equals(team.getCaptainParticipantId())) {
+                team.setSelectedAnswerId(answerId);
+            }
             roomService.saveAndBroadcast(session);
             roomRealtimeService.broadcastTeamSelection(
                     session.getPin(),
                     teamId,
-                    new TeamAnswerEventPayload(teamId, participant.getParticipantId(), team.getSelectedAnswerId(), team.getConfirmedAnswerId(), false, null)
+                    new TeamAnswerEventPayload(teamId, participant.getParticipantId(), participant.getSelectedAnswerId(), team.getConfirmedAnswerId(), false, null)
             );
             return null;
         });
@@ -277,6 +280,9 @@ public class GameLoopService {
             team.setConfirmedConfidenceLevel(null);
             team.setAnsweredAtEpochMillis(null);
             team.setHiddenAnswerIds(new ArrayList<>());
+        }
+        for (PlayerSlot participant : session.getParticipants()) {
+            participant.setSelectedAnswerId(null);
         }
         session.setUpdatedAt(Instant.now());
 

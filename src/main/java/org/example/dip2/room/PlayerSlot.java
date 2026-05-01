@@ -21,6 +21,7 @@ public class PlayerSlot {
     private boolean guest;
     private String teamId;
     private TeamRole teamRole;
+    private String selectedAnswerId;
     private long joinedAtEpochMillis;
     private Long lastAnsweredAtEpochMillis;
 }

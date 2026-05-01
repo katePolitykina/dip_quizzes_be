@@ -8,6 +8,7 @@ public record PlayerSlotResponse(
         String provider,
         boolean guest,
         String teamId,
-        String teamRole
+        String teamRole,
+        String selectedAnswerId
 ) {
 }

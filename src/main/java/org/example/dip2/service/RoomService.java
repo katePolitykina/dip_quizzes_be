@@ -237,6 +237,7 @@ public class RoomService {
             for (PlayerSlot participant : session.getParticipants()) {
                 participant.setTeamId(null);
                 participant.setTeamRole(null);
+                participant.setSelectedAnswerId(null);
             }
 
             for (TeamState team : session.getTeams()) {
@@ -271,6 +272,7 @@ public class RoomService {
                             .ifPresent(player -> {
                                 player.setTeamId(team.getTeamId());
                                 player.setTeamRole(TeamRole.MEMBER);
+                                player.setSelectedAnswerId(null);
                             });
                 }
 
@@ -412,7 +414,8 @@ public class RoomService {
                         player.getProvider(),
                         player.isGuest(),
                         player.getTeamId(),
-                        player.getTeamRole() == null ? null : player.getTeamRole().name()
+                        player.getTeamRole() == null ? null : player.getTeamRole().name(),
+                        player.getSelectedAnswerId()
                 )).toList(),
                 session.getTeams().stream().map(team -> new TeamStateResponse(
                         team.getTeamId(),
@@ -424,6 +427,7 @@ public class RoomService {
                         team.getSelectedAnswerId(),
                         team.getConfirmedAnswerId(),
                         resolveConfirmedAnswerCorrect(session, team),
+                        buildAnswerVoteCounts(session, team),
                         team.getTotalScore(),
                         team.isAnalystPowerUsed()
                 )).toList()
@@ -442,6 +446,17 @@ public class RoomService {
                 .findFirst()
                 .map(QuestionAnswerState::isCorrect)
                 .orElse(null);
+    }
+
+    private Map<String, Integer> buildAnswerVoteCounts(GameSession session, TeamState team) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (PlayerSlot participant : session.getParticipants()) {
+            if (!team.getTeamId().equals(participant.getTeamId()) || participant.getSelectedAnswerId() == null) {
+                continue;
+            }
+            counts.merge(participant.getSelectedAnswerId(), 1, Integer::sum);
+        }
+        return counts;
     }
 
     public CbmSettings defaultCbmSettings() {
