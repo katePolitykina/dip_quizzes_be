@@ -96,8 +96,20 @@ public class RoomService {
             GameSession session = loadSession(pin);
             ensureLobbyState(session);
 
+            String joiningParticipantId = authenticatedUser.id().toString();
+            String joiningDisplayName = authenticatedUser.displayName() == null ? "" : authenticatedUser.displayName().trim();
+            boolean nicknameTaken = session.getParticipants().stream()
+                    .anyMatch(player ->
+                            !player.getParticipantId().equals(joiningParticipantId)
+                                    && player.getDisplayName() != null
+                                    && player.getDisplayName().trim().equalsIgnoreCase(joiningDisplayName)
+                    );
+            if (nicknameTaken) {
+                throw new ApiException(HttpStatus.CONFLICT, "This name is already taken in the room");
+            }
+
             boolean alreadyJoined = session.getParticipants().stream()
-                    .anyMatch(player -> player.getParticipantId().equals(authenticatedUser.id().toString()));
+                    .anyMatch(player -> player.getParticipantId().equals(joiningParticipantId));
             if (!alreadyJoined) {
                 session.getParticipants().add(toPlayerSlot(authenticatedUser));
             }
