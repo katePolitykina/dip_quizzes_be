@@ -4,6 +4,7 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -18,6 +19,7 @@ import org.example.dip2.dto.room.FinalTeamReportResponse;
 import org.example.dip2.dto.room.GameSessionResponse;
 import org.example.dip2.dto.room.LeaderboardEntryResponse;
 import org.example.dip2.dto.room.PlayerSlotResponse;
+import org.example.dip2.dto.room.UpdateTeamsRequest;
 import org.example.dip2.dto.room.TeamQuestionScoreResponse;
 import org.example.dip2.dto.room.TeamStateResponse;
 import org.example.dip2.dto.room.UpdateTeamRolesRequest;
@@ -61,6 +63,7 @@ public class RoomService {
     }
 
     public GameSessionResponse createRoom(AuthenticatedUser authenticatedUser, CreateRoomRequest request) {
+        validateTeamConfiguration(Boolean.TRUE.equals(request.playInTeams()), request.teamCount());
         for (int attempt = 0; attempt < MAX_PIN_ATTEMPTS; attempt++) {
             Instant now = Instant.now();
             GameSession session = GameSession.builder()
@@ -68,13 +71,18 @@ public class RoomService {
                     .hostUserId(authenticatedUser.id().toString())
                     .globalTimer(request.globalTimer())
                     .cbmEnabled(Boolean.TRUE.equals(request.cbmEnabled()))
+                    .playInTeams(Boolean.TRUE.equals(request.playInTeams()))
+                    .configuredTeamCount(Boolean.TRUE.equals(request.playInTeams()) ? request.teamCount() : null)
                     .status(GameStatus.LOBBY)
                     .createdAt(now)
                     .updatedAt(now)
                     .cbmSettings(defaultCbmSettings())
-                    .participants(new ArrayList<>(List.of(toPlayerSlot(authenticatedUser))))
-                    .teams(new ArrayList<>())
+                    .participants(new ArrayList<>())
+                    .teams(Boolean.TRUE.equals(request.playInTeams()) ? createEmptyTeams(request.teamCount()) : new ArrayList<>())
                     .build();
+            if (!session.isPlayInTeams()) {
+                syncSoloTeams(session);
+            }
             if (gameSessionStore.createIfAbsent(session)) {
                 return broadcastRoomState(session);
             }
@@ -92,6 +100,9 @@ public class RoomService {
             if (!alreadyJoined) {
                 session.getParticipants().add(toPlayerSlot(authenticatedUser));
             }
+            if (!session.isPlayInTeams()) {
+                syncSoloTeams(session);
+            }
             session.setUpdatedAt(Instant.now());
             return saveAndBroadcast(session);
         });
@@ -102,12 +113,15 @@ public class RoomService {
             GameSession session = loadSession(pin);
             ensureHost(session, authenticatedUser);
             ensureLobbyState(session);
+            if (!session.isPlayInTeams()) {
+                throw new ApiException(HttpStatus.CONFLICT, "Team distribution is disabled for solo rooms");
+            }
 
             int teamCount = request.teamCount();
-            if (session.getParticipants().size() < teamCount * 2) {
+            if (session.getParticipants().size() < teamCount) {
                 throw new ApiException(
                         HttpStatus.BAD_REQUEST,
-                        "At least two participants per team are required to assign captain and analyst roles"
+                        "Each team must have at least one participant"
                 );
             }
 
@@ -115,14 +129,7 @@ public class RoomService {
                     .sorted(Comparator.comparingLong(PlayerSlot::getJoinedAtEpochMillis))
                     .toList();
 
-            List<TeamState> teams = new ArrayList<>();
-            for (int index = 0; index < teamCount; index++) {
-                teams.add(TeamState.builder()
-                        .teamId(UUID.randomUUID().toString())
-                        .name("Team " + (index + 1))
-                        .participantIds(new ArrayList<>())
-                        .build());
-            }
+            List<TeamState> teams = createEmptyTeams(teamCount);
 
             for (int index = 0; index < participants.size(); index++) {
                 PlayerSlot participant = participants.get(index);
@@ -142,11 +149,26 @@ public class RoomService {
         });
     }
 
+    private List<TeamState> createEmptyTeams(int teamCount) {
+        List<TeamState> teams = new ArrayList<>();
+        for (int index = 0; index < teamCount; index++) {
+            teams.add(TeamState.builder()
+                    .teamId(UUID.randomUUID().toString())
+                    .name("Team " + (index + 1))
+                    .participantIds(new ArrayList<>())
+                    .build());
+        }
+        return teams;
+    }
+
     public GameSessionResponse updateRoles(String pin, AuthenticatedUser authenticatedUser, UpdateTeamRolesRequest request) {
         return executeLocked(pin, () -> {
             GameSession session = loadSession(pin);
             ensureHost(session, authenticatedUser);
             ensureLobbyState(session);
+            if (!session.isPlayInTeams()) {
+                throw new ApiException(HttpStatus.CONFLICT, "Role assignment is disabled for solo rooms");
+            }
 
             if (session.getTeams().isEmpty()) {
                 throw new ApiException(HttpStatus.CONFLICT, "Teams must be distributed before assigning roles");
@@ -164,9 +186,6 @@ public class RoomService {
                 if (assignment == null) {
                     continue;
                 }
-                if (assignment.captainParticipantId().equals(assignment.analystParticipantId())) {
-                    throw new ApiException(HttpStatus.BAD_REQUEST, "Captain and analyst must be different participants");
-                }
                 if (!team.getParticipantIds().contains(assignment.captainParticipantId())
                         || !team.getParticipantIds().contains(assignment.analystParticipantId())) {
                     throw new ApiException(HttpStatus.BAD_REQUEST, "Assigned roles must belong to the target team");
@@ -183,6 +202,80 @@ public class RoomService {
             for (TeamState team : session.getTeams()) {
                 applyRole(session.getParticipants(), team.getCaptainParticipantId(), TeamRole.CAPTAIN);
                 applyRole(session.getParticipants(), team.getAnalystParticipantId(), TeamRole.ANALYST);
+            }
+
+            session.setUpdatedAt(Instant.now());
+            return saveAndBroadcast(session);
+        });
+    }
+
+    public GameSessionResponse updateTeams(String pin, AuthenticatedUser authenticatedUser, UpdateTeamsRequest request) {
+        return executeLocked(pin, () -> {
+            GameSession session = loadSession(pin);
+            ensureHost(session, authenticatedUser);
+            ensureLobbyState(session);
+            if (!session.isPlayInTeams()) {
+                throw new ApiException(HttpStatus.CONFLICT, "Manual team assignment is disabled for solo rooms");
+            }
+            if (session.getTeams().isEmpty()) {
+                throw new ApiException(HttpStatus.CONFLICT, "Teams must be created before assigning participants");
+            }
+
+            Map<String, UpdateTeamsRequest.TeamAssignmentRequest> assignmentsByTeam = request.assignments().stream()
+                    .collect(java.util.stream.Collectors.toMap(
+                            UpdateTeamsRequest.TeamAssignmentRequest::teamId,
+                            assignment -> assignment,
+                            (left, right) -> right
+                    ));
+
+            java.util.Set<String> seenParticipants = new java.util.HashSet<>();
+            java.util.Set<String> validParticipantIds = session.getParticipants().stream()
+                    .map(PlayerSlot::getParticipantId)
+                    .collect(java.util.stream.Collectors.toSet());
+
+            for (PlayerSlot participant : session.getParticipants()) {
+                participant.setTeamId(null);
+                participant.setTeamRole(null);
+            }
+
+            for (TeamState team : session.getTeams()) {
+                UpdateTeamsRequest.TeamAssignmentRequest assignment = assignmentsByTeam.get(team.getTeamId());
+                List<String> participantIds = assignment == null || assignment.participantIds() == null
+                        ? List.of()
+                        : assignment.participantIds();
+
+                for (String participantId : participantIds) {
+                    if (!validParticipantIds.contains(participantId)) {
+                        throw new ApiException(HttpStatus.BAD_REQUEST, "Assigned participants must belong to the room");
+                    }
+                    if (!seenParticipants.add(participantId)) {
+                        throw new ApiException(HttpStatus.BAD_REQUEST, "A participant can only belong to one team");
+                    }
+                }
+
+                team.setParticipantIds(new ArrayList<>(participantIds));
+                team.setCaptainParticipantId(null);
+                team.setAnalystParticipantId(null);
+                team.setSelectedAnswerId(null);
+                team.setConfirmedAnswerId(null);
+                team.setConfirmedConfidenceLevel(null);
+                team.setAnsweredAtEpochMillis(null);
+                team.setAnalystPowerUsed(false);
+                team.setHiddenAnswerIds(new ArrayList<>());
+
+                for (String participantId : participantIds) {
+                    session.getParticipants().stream()
+                            .filter(player -> player.getParticipantId().equals(participantId))
+                            .findFirst()
+                            .ifPresent(player -> {
+                                player.setTeamId(team.getTeamId());
+                                player.setTeamRole(TeamRole.MEMBER);
+                            });
+                }
+
+                if (!participantIds.isEmpty()) {
+                    assignDefaultRoles(session.getParticipants(), team);
+                }
             }
 
             session.setUpdatedAt(Instant.now());
@@ -295,6 +388,8 @@ public class RoomService {
                 session.getQuizTitle(),
                 session.getGlobalTimer(),
                 session.isCbmEnabled(),
+                session.isPlayInTeams(),
+                session.getConfiguredTeamCount(),
                 session.getStatus().name(),
                 session.getCreatedAt(),
                 session.getUpdatedAt(),
@@ -347,7 +442,7 @@ public class RoomService {
     public void assignDefaultRoles(List<PlayerSlot> participants, TeamState team) {
         List<String> ids = team.getParticipantIds();
         team.setCaptainParticipantId(ids.isEmpty() ? null : ids.get(0));
-        team.setAnalystParticipantId(ids.size() > 1 ? ids.get(1) : null);
+        team.setAnalystParticipantId(ids.size() > 1 ? ids.get(1) : team.getCaptainParticipantId());
         applyRole(participants, team.getCaptainParticipantId(), TeamRole.CAPTAIN);
         applyRole(participants, team.getAnalystParticipantId(), TeamRole.ANALYST);
     }
@@ -359,10 +454,21 @@ public class RoomService {
         participants.stream()
                 .filter(player -> player.getParticipantId().equals(participantId))
                 .findFirst()
-                .ifPresent(player -> player.setTeamRole(teamRole));
+                .ifPresent(player -> {
+                    TeamRole currentRole = player.getTeamRole();
+                    if (currentRole == TeamRole.CAPTAIN || currentRole == TeamRole.ANALYST) {
+                        return;
+                    }
+                    player.setTeamRole(teamRole);
+                });
     }
 
     private void normalizeTeamsAfterMembershipChange(GameSession session) {
+        if (!session.isPlayInTeams()) {
+            syncSoloTeams(session);
+            return;
+        }
+
         for (PlayerSlot participant : session.getParticipants()) {
             participant.setTeamRole(participant.getTeamId() == null ? null : TeamRole.MEMBER);
         }
@@ -378,6 +484,54 @@ public class RoomService {
             nonEmptyTeams.add(team);
         }
         session.setTeams(nonEmptyTeams);
+    }
+
+    private void syncSoloTeams(GameSession session) {
+        for (PlayerSlot participant : session.getParticipants()) {
+            participant.setTeamId(participant.getParticipantId());
+            participant.setTeamRole(TeamRole.CAPTAIN);
+        }
+
+        Map<String, TeamState> existingTeamsByParticipant = new HashMap<>();
+        for (TeamState team : session.getTeams()) {
+            if (team.getParticipantIds().size() == 1) {
+                existingTeamsByParticipant.put(team.getParticipantIds().get(0), team);
+            }
+        }
+
+        List<PlayerSlot> participants = session.getParticipants().stream()
+                .sorted(Comparator.comparingLong(PlayerSlot::getJoinedAtEpochMillis))
+                .toList();
+        List<TeamState> teams = new ArrayList<>();
+
+        for (PlayerSlot participant : participants) {
+            TeamState team = existingTeamsByParticipant.getOrDefault(
+                    participant.getParticipantId(),
+                    TeamState.builder()
+                            .teamId(participant.getParticipantId())
+                            .participantIds(new ArrayList<>())
+                            .questionScores(new ArrayList<>())
+                            .hiddenAnswerIds(new ArrayList<>())
+                            .build()
+            );
+            team.setTeamId(participant.getParticipantId());
+            team.setName(participant.getDisplayName());
+            team.setParticipantIds(new ArrayList<>(List.of(participant.getParticipantId())));
+            team.setCaptainParticipantId(participant.getParticipantId());
+            team.setAnalystParticipantId(null);
+            teams.add(team);
+        }
+
+        session.setTeams(teams);
+    }
+
+    private void validateTeamConfiguration(boolean playInTeams, Integer teamCount) {
+        if (!playInTeams) {
+            return;
+        }
+        if (teamCount == null || teamCount < 2 || teamCount > 8) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Team rooms require a team count between 2 and 8");
+        }
     }
 
     private PlayerSlot toPlayerSlot(AuthenticatedUser authenticatedUser) {

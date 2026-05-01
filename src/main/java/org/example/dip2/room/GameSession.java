@@ -20,6 +20,8 @@ public class GameSession {
     private String hostUserId;
     private int globalTimer;
     private boolean cbmEnabled;
+    private boolean playInTeams;
+    private Integer configuredTeamCount;
     private GameStatus status;
     private Instant createdAt;
     private Instant updatedAt;

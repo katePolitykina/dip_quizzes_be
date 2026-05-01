@@ -10,6 +10,8 @@ public record GameSessionResponse(
         String quizTitle,
         int globalTimer,
         boolean cbmEnabled,
+        boolean playInTeams,
+        Integer configuredTeamCount,
         String status,
         Instant createdAt,
         Instant updatedAt,

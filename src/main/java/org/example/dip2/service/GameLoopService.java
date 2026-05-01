@@ -84,6 +84,22 @@ public class GameLoopService {
             if (session.getTeams().isEmpty()) {
                 throw new ApiException(HttpStatus.CONFLICT, "Teams must be created before starting a game");
             }
+            if (session.isPlayInTeams()) {
+                boolean hasWaitingParticipants = session.getParticipants().stream()
+                        .anyMatch(player -> player.getTeamId() == null);
+                if (hasWaitingParticipants) {
+                    throw new ApiException(HttpStatus.CONFLICT, "All joined players must be assigned to a team before the game starts");
+                }
+                boolean hasEmptyTeams = session.getTeams().stream().anyMatch(team -> team.getParticipantIds().isEmpty());
+                if (hasEmptyTeams) {
+                    throw new ApiException(HttpStatus.CONFLICT, "Every configured team must have at least one participant before the game starts");
+                }
+                boolean hasIncompleteTeams = session.getTeams().stream()
+                        .anyMatch(team -> team.getCaptainParticipantId() == null || team.getAnalystParticipantId() == null);
+                if (hasIncompleteTeams) {
+                    throw new ApiException(HttpStatus.CONFLICT, "Every team must have both a captain and analyst before the game starts");
+                }
+            }
 
             session.setCbmSettings(applyOverrides(session.getCbmSettings(), request.cbmOverrides()));
             resetGameProgress(session);
@@ -135,7 +151,7 @@ public class GameLoopService {
             TeamState team = roomService.loadTeam(session, teamId);
             PlayerSlot participant = roomService.loadParticipant(session, authenticatedUser.id().toString());
             ensureParticipantInTeam(team, participant);
-            if (participant.getTeamRole() != TeamRole.CAPTAIN) {
+            if (!participant.getParticipantId().equals(team.getCaptainParticipantId())) {
                 throw new ApiException(HttpStatus.FORBIDDEN, "Only the captain can confirm a team answer");
             }
             validateAnswerBelongsToQuestion(session, answerId);
@@ -172,7 +188,9 @@ public class GameLoopService {
             TeamState team = roomService.loadTeam(session, teamId);
             PlayerSlot participant = roomService.loadParticipant(session, authenticatedUser.id().toString());
             ensureParticipantInTeam(team, participant);
-            if (participant.getTeamRole() != TeamRole.ANALYST) {
+            boolean canUseSortAnswers = participant.getParticipantId().equals(team.getAnalystParticipantId())
+                    || (!session.isPlayInTeams() && participant.getParticipantId().equals(team.getCaptainParticipantId()));
+            if (!canUseSortAnswers) {
                 throw new ApiException(HttpStatus.FORBIDDEN, "Only the analyst can use SORT_ANSWERS");
             }
             if (team.isAnalystPowerUsed()) {

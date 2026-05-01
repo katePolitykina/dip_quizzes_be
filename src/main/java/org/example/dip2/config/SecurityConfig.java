@@ -63,6 +63,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/rooms").hasRole("USER")
                         .requestMatchers(HttpMethod.POST, "/api/rooms/*/join").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/rooms/*/teams/auto-distribute").hasRole("USER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/rooms/*/teams").hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/rooms/*/teams/roles").hasRole("USER")
                         .anyRequest().authenticated()
                 )

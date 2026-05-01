@@ -42,13 +42,16 @@ class GameEngineIntegrationTest {
     @Test
     void gameFinalizesWithLeaderboardAndFinalReport() {
         User hostUser = saveUser("host-engine@example.com");
+        User captainUser = saveUser("captain-engine@example.com");
         User analystUser = saveUser("analyst-engine@example.com");
         Quiz quiz = saveQuiz(hostUser);
 
         AuthenticatedUser host = authenticatedUser(hostUser, "Host");
+        AuthenticatedUser captain = authenticatedUser(captainUser, "Captain");
         AuthenticatedUser analyst = authenticatedUser(analystUser, "Analyst");
 
-        String pin = roomService.createRoom(host, new CreateRoomRequest(30, true)).pin();
+        String pin = roomService.createRoom(host, new CreateRoomRequest(30, true, true, 2)).pin();
+        roomService.joinRoom(pin, captain);
         roomService.joinRoom(pin, analyst);
         roomService.autoDistribute(pin, host, new AutoDistributeTeamsRequest(1));
         gameLoopService.startGame(pin, host, new StartGameRequest(quiz.getId().toString(), null));
@@ -61,7 +64,7 @@ class GameEngineIntegrationTest {
                 .getId();
 
         gameLoopService.selectTeamAnswer(pin, teamId, analyst, correctAnswerId);
-        gameLoopService.confirmTeamAnswer(pin, teamId, host, correctAnswerId, "HIGH");
+        gameLoopService.confirmTeamAnswer(pin, teamId, captain, correctAnswerId, "HIGH");
 
         var finished = roomService.loadSession(pin);
         assertEquals(GameStatus.FINISHED, finished.getStatus());
@@ -74,13 +77,16 @@ class GameEngineIntegrationTest {
     @Test
     void analystPowerCanOnlyBeUsedOncePerGamePerTeam() {
         User hostUser = saveUser("host-power@example.com");
+        User captainUser = saveUser("captain-power@example.com");
         User analystUser = saveUser("analyst-power@example.com");
         Quiz quiz = saveQuiz(hostUser);
 
         AuthenticatedUser host = authenticatedUser(hostUser, "Host");
+        AuthenticatedUser captain = authenticatedUser(captainUser, "Captain");
         AuthenticatedUser analyst = authenticatedUser(analystUser, "Analyst");
 
-        String pin = roomService.createRoom(host, new CreateRoomRequest(30, true)).pin();
+        String pin = roomService.createRoom(host, new CreateRoomRequest(30, true, true, 2)).pin();
+        roomService.joinRoom(pin, captain);
         roomService.joinRoom(pin, analyst);
         roomService.autoDistribute(pin, host, new AutoDistributeTeamsRequest(1));
         gameLoopService.startGame(pin, host, new StartGameRequest(quiz.getId().toString(), null));

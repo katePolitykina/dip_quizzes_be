@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.example.dip2.dto.room.AutoDistributeTeamsRequest;
 import org.example.dip2.dto.room.CreateRoomRequest;
 import org.example.dip2.dto.room.GameSessionResponse;
+import org.example.dip2.dto.room.UpdateTeamsRequest;
 import org.example.dip2.dto.room.UpdateTeamRolesRequest;
 import org.example.dip2.security.AuthenticatedUser;
 import org.example.dip2.service.RoomService;
@@ -49,6 +50,15 @@ public class RoomController {
             @Valid @RequestBody AutoDistributeTeamsRequest request
     ) {
         return roomService.autoDistribute(pin, authenticatedUser, request);
+    }
+
+    @PatchMapping("/{pin}/teams")
+    public GameSessionResponse updateTeams(
+            @PathVariable String pin,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @Valid @RequestBody UpdateTeamsRequest request
+    ) {
+        return roomService.updateTeams(pin, authenticatedUser, request);
     }
 
     @PatchMapping("/{pin}/teams/roles")
