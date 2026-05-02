@@ -116,8 +116,15 @@ public class GameLoopService {
         roomService.executeLocked(pin, () -> {
             GameSession session = roomService.loadSession(pin);
             roomService.ensureHost(session, authenticatedUser);
+            if (session.getStatus() == GameStatus.START_QUESTION) {
+                if (session.getAnswersCount() != session.getTeams().size()) {
+                    throw new ApiException(HttpStatus.CONFLICT, "All teams must confirm before advancing early");
+                }
+                finalizeQuestion(session.getPin(), session.getCurrentQuestionIndex(), session.getQuestionStartedAt());
+                return null;
+            }
             if (session.getStatus() != GameStatus.SHOW_RESULTS) {
-                throw new ApiException(HttpStatus.CONFLICT, "Room is not currently showing results");
+                throw new ApiException(HttpStatus.CONFLICT, "Room is not currently ready to advance");
             }
             int nextIndex = session.getCurrentQuestionIndex() + 1;
             if (nextIndex >= session.getQuestions().size()) {
