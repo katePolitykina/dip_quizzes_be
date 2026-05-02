@@ -182,9 +182,6 @@ public class GameLoopService {
                     "ANSWER_HISTOGRAM",
                     new AnswerHistogramPayload(session.getPin(), response.answersCount(), session.getTeams().size())
             );
-            if (response.answersCount() == session.getTeams().size()) {
-                finalizeQuestion(session.getPin(), session.getCurrentQuestionIndex(), session.getQuestionStartedAt());
-            }
             return null;
         });
     }
@@ -344,19 +341,21 @@ public class GameLoopService {
             }
 
             recalculateLeaderboard(session);
-            session.setStatus(isLastQuestion(session) ? GameStatus.FINISHED : GameStatus.SHOW_RESULTS);
-            session.setUpdatedAt(Instant.now());
-            if (session.getStatus() == GameStatus.FINISHED) {
+            if (isLastQuestion(session)) {
+                session.setStatus(GameStatus.FINISHED);
+                session.setUpdatedAt(Instant.now());
                 session.setFinalReport(buildFinalReport(session));
+                GameSessionResponse response = roomService.saveAndBroadcast(session);
+                roomRealtimeService.broadcastRoomEvent(session.getPin(), "QUESTION_RESULTS", response);
+                roomRealtimeService.broadcastRoomEvent(session.getPin(), "LEADERBOARD_UPDATED", response.leaderboard());
+                roomRealtimeService.broadcastLeaderboard(session.getPin(), response.leaderboard());
+                roomRealtimeService.broadcastRoomEvent(session.getPin(), "FINAL_REPORT", response.finalReport());
+                return null;
             }
 
-            GameSessionResponse response = roomService.saveAndBroadcast(session);
-            roomRealtimeService.broadcastRoomEvent(session.getPin(), "QUESTION_RESULTS", response);
-            roomRealtimeService.broadcastRoomEvent(session.getPin(), "LEADERBOARD_UPDATED", response.leaderboard());
-            roomRealtimeService.broadcastLeaderboard(session.getPin(), response.leaderboard());
-            if (session.getStatus() == GameStatus.FINISHED) {
-                roomRealtimeService.broadcastRoomEvent(session.getPin(), "FINAL_REPORT", response.finalReport());
-            }
+            roomRealtimeService.broadcastRoomEvent(session.getPin(), "LEADERBOARD_UPDATED", roomService.toResponse(session).leaderboard());
+            roomRealtimeService.broadcastLeaderboard(session.getPin(), roomService.toResponse(session).leaderboard());
+            startQuestion(session, session.getCurrentQuestionIndex() + 1);
             return null;
         });
     }

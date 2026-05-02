@@ -2,6 +2,7 @@ package org.example.dip2;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
@@ -65,6 +66,77 @@ class GameEngineIntegrationTest {
 
         gameLoopService.selectTeamAnswer(pin, teamId, analyst, correctAnswerId);
         gameLoopService.confirmTeamAnswer(pin, teamId, captain, correctAnswerId, "HIGH");
+
+        var active = roomService.loadSession(pin);
+        assertEquals(GameStatus.START_QUESTION, active.getStatus());
+        assertNull(active.getFinalReport());
+        assertEquals(0, active.getTeams().get(0).getQuestionScores().size());
+    }
+
+    @Test
+    void timerExpiryMovesRoomToNextQuestion() {
+        User hostUser = saveUser("host-timer@example.com");
+        User captainUser = saveUser("captain-timer@example.com");
+        User analystUser = saveUser("analyst-timer@example.com");
+        Quiz quiz = saveQuiz(hostUser, 1, 2);
+
+        AuthenticatedUser host = authenticatedUser(hostUser, "Host");
+        AuthenticatedUser captain = authenticatedUser(captainUser, "Captain");
+        AuthenticatedUser analyst = authenticatedUser(analystUser, "Analyst");
+
+        String pin = roomService.createRoom(host, new CreateRoomRequest(30, true, true, 2)).pin();
+        roomService.joinRoom(pin, captain);
+        roomService.joinRoom(pin, analyst);
+        roomService.autoDistribute(pin, host, new AutoDistributeTeamsRequest(1));
+        gameLoopService.startGame(pin, host, new StartGameRequest(quiz.getId().toString(), null));
+
+        String teamId = roomService.loadSession(pin).getTeams().get(0).getTeamId();
+        String correctAnswerId = roomService.loadSession(pin).getQuestions().get(0).getAnswers().stream()
+                .filter(answer -> answer.isCorrect())
+                .findFirst()
+                .orElseThrow()
+                .getId();
+
+        gameLoopService.selectTeamAnswer(pin, teamId, analyst, correctAnswerId);
+        gameLoopService.confirmTeamAnswer(pin, teamId, captain, correctAnswerId, "HIGH");
+
+        waitForStatus(pin, GameStatus.START_QUESTION, 1);
+
+        var nextQuestion = roomService.loadSession(pin);
+        assertEquals(GameStatus.START_QUESTION, nextQuestion.getStatus());
+        assertEquals(1, nextQuestion.getCurrentQuestionIndex());
+        assertEquals(1, nextQuestion.getTeams().get(0).getQuestionScores().size());
+        assertNull(nextQuestion.getFinalReport());
+    }
+
+    @Test
+    void finalTimerExpiryFinalizesWithLeaderboardAndFinalReport() {
+        User hostUser = saveUser("host-final@example.com");
+        User captainUser = saveUser("captain-final@example.com");
+        User analystUser = saveUser("analyst-final@example.com");
+        Quiz quiz = saveQuiz(hostUser, 1, 1);
+
+        AuthenticatedUser host = authenticatedUser(hostUser, "Host");
+        AuthenticatedUser captain = authenticatedUser(captainUser, "Captain");
+        AuthenticatedUser analyst = authenticatedUser(analystUser, "Analyst");
+
+        String pin = roomService.createRoom(host, new CreateRoomRequest(30, true, true, 2)).pin();
+        roomService.joinRoom(pin, captain);
+        roomService.joinRoom(pin, analyst);
+        roomService.autoDistribute(pin, host, new AutoDistributeTeamsRequest(1));
+        gameLoopService.startGame(pin, host, new StartGameRequest(quiz.getId().toString(), null));
+
+        String teamId = roomService.loadSession(pin).getTeams().get(0).getTeamId();
+        String correctAnswerId = roomService.loadSession(pin).getQuestions().get(0).getAnswers().stream()
+                .filter(answer -> answer.isCorrect())
+                .findFirst()
+                .orElseThrow()
+                .getId();
+
+        gameLoopService.selectTeamAnswer(pin, teamId, analyst, correctAnswerId);
+        gameLoopService.confirmTeamAnswer(pin, teamId, captain, correctAnswerId, "HIGH");
+
+        waitForStatus(pin, GameStatus.FINISHED, 1);
 
         var finished = roomService.loadSession(pin);
         assertEquals(GameStatus.FINISHED, finished.getStatus());
@@ -133,24 +205,55 @@ class GameEngineIntegrationTest {
     }
 
     private Quiz saveQuiz(User author) {
-        Question question = Question.builder()
-                .text("Which option is correct?")
-                .pointsWeight(100)
-                .timerOverride(30)
-                .build();
-        question.replaceAnswers(List.of(
-                Answer.builder().text("Correct").isCorrect(true).build(),
-                Answer.builder().text("Wrong A").isCorrect(false).build(),
-                Answer.builder().text("Wrong B").isCorrect(false).build(),
-                Answer.builder().text("Wrong C").isCorrect(false).build()
-        ));
+        return saveQuiz(author, 30, 1);
+    }
 
+    private Quiz saveQuiz(User author, int timerOverrideSeconds, int questionCount) {
         Quiz quiz = Quiz.builder()
                 .title("Engine Quiz")
                 .author(author)
                 .build();
-        quiz.replaceQuestions(List.of(question));
+
+        quiz.replaceQuestions(java.util.stream.IntStream.range(0, questionCount)
+                .mapToObj(index -> {
+                    Question question = Question.builder()
+                            .text("Which option is correct? " + index)
+                            .pointsWeight(100)
+                            .timerOverride(timerOverrideSeconds)
+                            .build();
+                    question.replaceAnswers(List.of(
+                            Answer.builder().text("Correct").isCorrect(true).build(),
+                            Answer.builder().text("Wrong A").isCorrect(false).build(),
+                            Answer.builder().text("Wrong B").isCorrect(false).build(),
+                            Answer.builder().text("Wrong C").isCorrect(false).build()
+                    ));
+                    return question;
+                }).toList());
         return quizRepository.saveAndFlush(quiz);
+    }
+
+    private void waitForStatus(String pin, GameStatus expectedStatus, int expectedQuestionIndex) {
+        long deadline = System.currentTimeMillis() + 4000L;
+        while (System.currentTimeMillis() < deadline) {
+            var session = roomService.loadSession(pin);
+            if (session.getStatus() == expectedStatus && session.getCurrentQuestionIndex() != null
+                    && session.getCurrentQuestionIndex() == expectedQuestionIndex) {
+                return;
+            }
+            try {
+                Thread.sleep(50L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while waiting for room state", exception);
+            }
+        }
+        var session = roomService.loadSession(pin);
+        throw new AssertionError("Expected status %s at question %s but was %s at %s".formatted(
+                expectedStatus,
+                expectedQuestionIndex,
+                session.getStatus(),
+                session.getCurrentQuestionIndex()
+        ));
     }
 
     private AuthenticatedUser authenticatedUser(User user, String displayName) {
