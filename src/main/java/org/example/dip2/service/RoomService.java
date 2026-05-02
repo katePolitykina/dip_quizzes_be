@@ -142,6 +142,28 @@ public class RoomService {
         });
     }
 
+    public GameSessionResponse leaveRoom(String pin, AuthenticatedUser authenticatedUser) {
+        return executeLocked(pin, () -> {
+            GameSession session = loadSession(pin);
+            String participantId = authenticatedUser.id().toString();
+            if (session.getHostUserId().equals(participantId)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Host must end the room instead of leaving it");
+            }
+
+            boolean removed = session.getParticipants().removeIf(player -> player.getParticipantId().equals(participantId));
+            if (!removed) {
+                throw new ApiException(HttpStatus.NOT_FOUND, "Participant not found in room");
+            }
+
+            normalizeTeamsAfterMembershipChange(session);
+            session.setUpdatedAt(Instant.now());
+            GameSessionResponse response = saveAndBroadcast(session);
+            webSocketSessionRegistry.disconnectParticipant(session.getPin(), participantId);
+            roomRealtimeService.broadcastRoomEvent(session.getPin(), "PLAYER_KICKED", response);
+            return response;
+        });
+    }
+
     public GameSessionResponse autoDistribute(String pin, AuthenticatedUser authenticatedUser, AutoDistributeTeamsRequest request) {
         return executeLocked(pin, () -> {
             GameSession session = loadSession(pin);

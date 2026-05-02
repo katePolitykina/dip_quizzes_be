@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.DeleteMapping;
 
 @RestController
 @RequestMapping("/api/rooms")
@@ -50,6 +51,14 @@ public class RoomController {
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser
     ) {
         return roomService.getRoom(pin, authenticatedUser);
+    }
+
+    @DeleteMapping("/{pin}/leave")
+    public GameSessionResponse leaveRoom(
+            @PathVariable String pin,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        return roomService.leaveRoom(pin, authenticatedUser);
     }
 
     @PostMapping("/{pin}/teams/auto-distribute")
