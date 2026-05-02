@@ -21,6 +21,8 @@ import org.example.dip2.room.CbmSettings;
 import org.example.dip2.room.ConfidenceLevel;
 import org.example.dip2.room.FinalGameReport;
 import org.example.dip2.room.FinalPlayerReport;
+import org.example.dip2.room.FinalQuestionDetail;
+import org.example.dip2.room.FinalQuestionPlayerAnswer;
 import org.example.dip2.room.FinalTeamReport;
 import org.example.dip2.room.GameSession;
 import org.example.dip2.room.GameStatus;
@@ -477,11 +479,50 @@ public class GameLoopService {
             playerReports.get(index).setRank(index + 1);
         }
 
+        List<FinalQuestionDetail> questionDetails = session.getQuestions().stream()
+                .map(question -> FinalQuestionDetail.builder()
+                        .questionId(question.getId())
+                        .questionText(question.getText())
+                        .playerAnswers(playerReports.stream()
+                                .map(playerReport -> {
+                                    PlayerSlot participant = session.getParticipants().stream()
+                                            .filter(candidate -> candidate.getParticipantId().equals(playerReport.getParticipantId()))
+                                            .findFirst()
+                                            .orElse(null);
+                                    if (participant == null) {
+                                        return null;
+                                    }
+                                    var answerSnapshot = participant.getQuestionAnswers().stream()
+                                            .filter(candidate -> question.getId().equals(candidate.getQuestionId()))
+                                            .findFirst()
+                                            .orElse(null);
+                                    String selectedAnswerId = answerSnapshot == null ? null : answerSnapshot.getSelectedAnswerId();
+                                    String selectedAnswerText = selectedAnswerId == null
+                                            ? null
+                                            : question.getAnswers().stream()
+                                                    .filter(answer -> answer.getId().equals(selectedAnswerId))
+                                                    .map(QuestionAnswerState::getText)
+                                                    .findFirst()
+                                                    .orElse(null);
+                                    return FinalQuestionPlayerAnswer.builder()
+                                            .participantId(playerReport.getParticipantId())
+                                            .displayName(playerReport.getDisplayName())
+                                            .selectedAnswerId(selectedAnswerId)
+                                            .selectedAnswerText(selectedAnswerText)
+                                            .responseTimeMillis(answerSnapshot == null ? null : answerSnapshot.getResponseTimeMillis())
+                                            .build();
+                                })
+                                .filter(java.util.Objects::nonNull)
+                                .toList())
+                        .build())
+                .toList();
+
         return FinalGameReport.builder()
                 .quizId(session.getQuizId())
                 .quizTitle(session.getQuizTitle())
                 .generatedAt(Instant.now())
                 .players(playerReports)
+                .questions(questionDetails)
                 .teams(session.getTeams().stream()
                         .map(team -> FinalTeamReport.builder()
                                 .teamId(team.getTeamId())

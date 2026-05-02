@@ -16,6 +16,8 @@ import org.example.dip2.dto.room.CurrentQuestionAnswerResponse;
 import org.example.dip2.dto.room.CurrentQuestionResponse;
 import org.example.dip2.dto.room.FinalGameReportResponse;
 import org.example.dip2.dto.room.FinalPlayerReportResponse;
+import org.example.dip2.dto.room.FinalQuestionDetailResponse;
+import org.example.dip2.dto.room.FinalQuestionPlayerAnswerResponse;
 import org.example.dip2.dto.room.FinalTeamReportResponse;
 import org.example.dip2.dto.room.GameSessionResponse;
 import org.example.dip2.dto.room.LeaderboardEntryResponse;
@@ -689,6 +691,19 @@ public class RoomService {
                                 player.getTotalResponseTimeMillis(),
                                 player.getAverageResponseTimeMillis(),
                                 player.getRank()
+                        )).toList(),
+                finalReport.getQuestions().stream()
+                        .map(question -> new FinalQuestionDetailResponse(
+                                question.getQuestionId(),
+                                question.getQuestionText(),
+                                question.getPlayerAnswers().stream()
+                                        .map(answer -> new FinalQuestionPlayerAnswerResponse(
+                                                answer.getParticipantId(),
+                                                answer.getDisplayName(),
+                                                answer.getSelectedAnswerId(),
+                                                answer.getSelectedAnswerText(),
+                                                answer.getResponseTimeMillis()
+                                        )).toList()
                         )).toList(),
                 finalReport.getTeams().stream()
                         .map(team -> new FinalTeamReportResponse(

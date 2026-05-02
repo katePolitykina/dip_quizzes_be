@@ -24,5 +24,8 @@ public class FinalGameReport {
     private List<FinalPlayerReport> players = new ArrayList<>();
 
     @Builder.Default
+    private List<FinalQuestionDetail> questions = new ArrayList<>();
+
+    @Builder.Default
     private List<FinalTeamReport> teams = new ArrayList<>();
 }
