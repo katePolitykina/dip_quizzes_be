@@ -71,6 +71,9 @@ class GameEngineIntegrationTest {
         assertEquals(GameStatus.START_QUESTION, active.getStatus());
         assertNull(active.getFinalReport());
         assertEquals(0, active.getTeams().get(0).getQuestionScores().size());
+        assertEquals(1, roomService.loadParticipant(active, analystUser.getId().toString()).getQuestionAnswers().size());
+        assertEquals(correctAnswerId, roomService.loadParticipant(active, analystUser.getId().toString()).getQuestionAnswers().get(0).getSelectedAnswerId());
+        assertNotNull(roomService.loadParticipant(active, analystUser.getId().toString()).getQuestionAnswers().get(0).getResponseTimeMillis());
     }
 
     @Test
@@ -107,6 +110,8 @@ class GameEngineIntegrationTest {
         assertEquals(1, nextQuestion.getCurrentQuestionIndex());
         assertEquals(1, nextQuestion.getTeams().get(0).getQuestionScores().size());
         assertNull(nextQuestion.getFinalReport());
+        assertEquals(1, roomService.loadParticipant(nextQuestion, analystUser.getId().toString()).getQuestionAnswers().size());
+        assertEquals(correctAnswerId, roomService.loadParticipant(nextQuestion, analystUser.getId().toString()).getQuestionAnswers().get(0).getSelectedAnswerId());
     }
 
     @Test
@@ -144,6 +149,8 @@ class GameEngineIntegrationTest {
         assertEquals(1, finished.getLeaderboard().size());
         assertEquals(1, finished.getTeams().get(0).getQuestionScores().size());
         assertNotNull(roomService.toResponse(finished).finalReport());
+        assertEquals(1, roomService.loadParticipant(finished, captainUser.getId().toString()).getQuestionAnswers().size());
+        assertEquals(correctAnswerId, roomService.loadParticipant(finished, captainUser.getId().toString()).getQuestionAnswers().get(0).getSelectedAnswerId());
     }
 
     @Test

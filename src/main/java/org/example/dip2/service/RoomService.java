@@ -15,10 +15,12 @@ import org.example.dip2.dto.room.CreateRoomRequest;
 import org.example.dip2.dto.room.CurrentQuestionAnswerResponse;
 import org.example.dip2.dto.room.CurrentQuestionResponse;
 import org.example.dip2.dto.room.FinalGameReportResponse;
+import org.example.dip2.dto.room.FinalPlayerReportResponse;
 import org.example.dip2.dto.room.FinalTeamReportResponse;
 import org.example.dip2.dto.room.GameSessionResponse;
 import org.example.dip2.dto.room.LeaderboardEntryResponse;
 import org.example.dip2.dto.room.PlayerSlotResponse;
+import org.example.dip2.dto.room.PlayerQuestionAnswerResponse;
 import org.example.dip2.dto.room.UpdateTeamsRequest;
 import org.example.dip2.dto.room.TeamQuestionScoreResponse;
 import org.example.dip2.dto.room.TeamStateResponse;
@@ -444,7 +446,16 @@ public class RoomService {
                         player.isGuest(),
                         player.getTeamId(),
                         player.getTeamRole() == null ? null : player.getTeamRole().name(),
-                        player.getSelectedAnswerId()
+                        player.getSelectedAnswerId(),
+                        player.getQuestionAnswers().stream()
+                                .map(answer -> new PlayerQuestionAnswerResponse(
+                                        answer.getQuestionId(),
+                                        answer.getQuestionIndex(),
+                                        answer.getSelectedAnswerId(),
+                                        answer.getAnsweredAtEpochMillis(),
+                                        answer.getResponseTimeMillis()
+                                ))
+                                .toList()
                 )).toList(),
                 session.getTeams().stream().map(team -> new TeamStateResponse(
                         team.getTeamId(),
@@ -669,6 +680,16 @@ public class RoomService {
                 finalReport.getQuizId(),
                 finalReport.getQuizTitle(),
                 finalReport.getGeneratedAt(),
+                finalReport.getPlayers().stream()
+                        .map(player -> new FinalPlayerReportResponse(
+                                player.getParticipantId(),
+                                player.getDisplayName(),
+                                player.getTeamName(),
+                                player.getCorrectAnswers(),
+                                player.getTotalResponseTimeMillis(),
+                                player.getAverageResponseTimeMillis(),
+                                player.getRank()
+                        )).toList(),
                 finalReport.getTeams().stream()
                         .map(team -> new FinalTeamReportResponse(
                                 team.getTeamId(),

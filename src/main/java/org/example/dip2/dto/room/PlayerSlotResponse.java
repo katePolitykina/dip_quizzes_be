@@ -9,6 +9,7 @@ public record PlayerSlotResponse(
         boolean guest,
         String teamId,
         String teamRole,
-        String selectedAnswerId
+        String selectedAnswerId,
+        java.util.List<PlayerQuestionAnswerResponse> questionAnswers
 ) {
 }

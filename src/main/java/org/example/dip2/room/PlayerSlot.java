@@ -1,5 +1,7 @@
 package org.example.dip2.room;
 
+import java.util.ArrayList;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -24,4 +26,7 @@ public class PlayerSlot {
     private String selectedAnswerId;
     private long joinedAtEpochMillis;
     private Long lastAnsweredAtEpochMillis;
+
+    @Builder.Default
+    private List<PlayerQuestionAnswer> questionAnswers = new ArrayList<>();
 }

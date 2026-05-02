@@ -7,6 +7,7 @@ public record FinalGameReportResponse(
         String quizId,
         String quizTitle,
         Instant generatedAt,
+        List<FinalPlayerReportResponse> players,
         List<FinalTeamReportResponse> teams
 ) {
 }

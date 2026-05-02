@@ -20,11 +20,13 @@ import org.example.dip2.repository.QuizRepository;
 import org.example.dip2.room.CbmSettings;
 import org.example.dip2.room.ConfidenceLevel;
 import org.example.dip2.room.FinalGameReport;
+import org.example.dip2.room.FinalPlayerReport;
 import org.example.dip2.room.FinalTeamReport;
 import org.example.dip2.room.GameSession;
 import org.example.dip2.room.GameStatus;
 import org.example.dip2.room.LeaderboardEntry;
 import org.example.dip2.room.PlayerSlot;
+import org.example.dip2.room.PlayerQuestionAnswer;
 import org.example.dip2.room.QuestionAnswerState;
 import org.example.dip2.room.QuestionState;
 import org.example.dip2.room.TeamQuestionScore;
@@ -134,6 +136,7 @@ public class GameLoopService {
             validateAnswerBelongsToQuestion(session, answerId);
 
             participant.setSelectedAnswerId(answerId);
+            upsertParticipantQuestionAnswer(session, participant, answerId);
             if (participant.getParticipantId().equals(team.getCaptainParticipantId())) {
                 team.setSelectedAnswerId(answerId);
             }
@@ -167,6 +170,7 @@ public class GameLoopService {
             team.setSelectedAnswerId(answerId);
             team.setConfirmedAnswerId(answerId);
             team.setConfirmedConfidenceLevel(parseConfidence(confidenceLevelValue));
+            upsertParticipantQuestionAnswer(session, participant, answerId);
             team.setAnsweredAtEpochMillis(System.currentTimeMillis());
             participant.setLastAnsweredAtEpochMillis(team.getAnsweredAtEpochMillis());
             recalculateAnswersCount(session);
@@ -426,10 +430,58 @@ public class GameLoopService {
     }
 
     private FinalGameReport buildFinalReport(GameSession session) {
+        List<FinalPlayerReport> playerReports = session.getParticipants().stream()
+                .map(participant -> {
+                    int correctAnswers = 0;
+                    long totalResponseTimeMillis = 0L;
+                    int answeredQuestions = 0;
+
+                    for (var answerSnapshot : participant.getQuestionAnswers()) {
+                        if (answerSnapshot.getQuestionIndex() == null
+                                || answerSnapshot.getQuestionIndex() < 0
+                                || answerSnapshot.getQuestionIndex() >= session.getQuestions().size()) {
+                            continue;
+                        }
+                        answeredQuestions++;
+                        totalResponseTimeMillis += answerSnapshot.getResponseTimeMillis() == null ? 0L : answerSnapshot.getResponseTimeMillis();
+                        QuestionState question = session.getQuestions().get(answerSnapshot.getQuestionIndex());
+                        boolean correct = question.getAnswers().stream()
+                                .anyMatch(answer -> answer.getId().equals(answerSnapshot.getSelectedAnswerId()) && answer.isCorrect());
+                        if (correct) {
+                            correctAnswers++;
+                        }
+                    }
+
+                    TeamState team = participant.getTeamId() == null
+                            ? null
+                            : session.getTeams().stream()
+                                    .filter(candidate -> candidate.getTeamId().equals(participant.getTeamId()))
+                                    .findFirst()
+                                    .orElse(null);
+                    double averageResponseTimeMillis = answeredQuestions == 0 ? 0.0 : (double) totalResponseTimeMillis / answeredQuestions;
+                    return FinalPlayerReport.builder()
+                            .participantId(participant.getParticipantId())
+                            .displayName(participant.getDisplayName())
+                            .teamName(team == null ? null : team.getName())
+                            .correctAnswers(correctAnswers)
+                            .totalResponseTimeMillis(totalResponseTimeMillis)
+                            .averageResponseTimeMillis(averageResponseTimeMillis)
+                            .build();
+                })
+                .sorted(Comparator.comparingInt(FinalPlayerReport::getCorrectAnswers).reversed()
+                        .thenComparingLong(FinalPlayerReport::getTotalResponseTimeMillis)
+                        .thenComparing(FinalPlayerReport::getDisplayName, String.CASE_INSENSITIVE_ORDER))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+
+        for (int index = 0; index < playerReports.size(); index++) {
+            playerReports.get(index).setRank(index + 1);
+        }
+
         return FinalGameReport.builder()
                 .quizId(session.getQuizId())
                 .quizTitle(session.getQuizTitle())
                 .generatedAt(Instant.now())
+                .players(playerReports)
                 .teams(session.getTeams().stream()
                         .map(team -> FinalTeamReport.builder()
                                 .teamId(team.getTeamId())
@@ -463,6 +515,32 @@ public class GameLoopService {
         for (PlayerSlot participant : session.getParticipants()) {
             participant.setLastAnsweredAtEpochMillis(null);
         }
+    }
+
+    private void upsertParticipantQuestionAnswer(GameSession session, PlayerSlot participant, String answerId) {
+        if (session.getCurrentQuestionIndex() == null || session.getQuestionStartedAt() == null) {
+            return;
+        }
+
+        QuestionState question = currentQuestion(session);
+        long answeredAtEpochMillis = System.currentTimeMillis();
+        long responseTimeMillis = Math.max(0L, answeredAtEpochMillis - session.getQuestionStartedAt().toEpochMilli());
+        PlayerQuestionAnswer answerSnapshot = participant.getQuestionAnswers().stream()
+                .filter(entry -> question.getId().equals(entry.getQuestionId()))
+                .findFirst()
+                .orElseGet(() -> {
+                    PlayerQuestionAnswer created = PlayerQuestionAnswer.builder()
+                            .questionId(question.getId())
+                            .questionIndex(session.getCurrentQuestionIndex())
+                            .build();
+                    participant.getQuestionAnswers().add(created);
+                    return created;
+                });
+
+        answerSnapshot.setQuestionIndex(session.getCurrentQuestionIndex());
+        answerSnapshot.setSelectedAnswerId(answerId);
+        answerSnapshot.setAnsweredAtEpochMillis(answeredAtEpochMillis);
+        answerSnapshot.setResponseTimeMillis(responseTimeMillis);
     }
 
     private void recalculateAnswersCount(GameSession session) {

@@ -21,5 +21,8 @@ public class FinalGameReport {
     private Instant generatedAt;
 
     @Builder.Default
+    private List<FinalPlayerReport> players = new ArrayList<>();
+
+    @Builder.Default
     private List<FinalTeamReport> teams = new ArrayList<>();
 }
