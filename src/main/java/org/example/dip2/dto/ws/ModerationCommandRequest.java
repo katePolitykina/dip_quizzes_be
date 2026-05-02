@@ -8,6 +8,7 @@ public record ModerationCommandRequest(
 ) {
     public enum ModerationCommand {
         TOGGLE_PAUSE,
-        KICK_PLAYER
+        KICK_PLAYER,
+        END_GAME
     }
 }

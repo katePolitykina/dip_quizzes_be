@@ -262,6 +262,32 @@ public class GameLoopService {
         });
     }
 
+    public void endGame(String pin, AuthenticatedUser authenticatedUser) {
+        roomService.executeLocked(pin, () -> {
+            GameSession session = roomService.loadSession(pin);
+            roomService.ensureHost(session, authenticatedUser);
+            if (session.getStatus() == GameStatus.FINISHED) {
+                return null;
+            }
+
+            recalculateLeaderboard(session);
+            session.setStatus(GameStatus.FINISHED);
+            session.setPausedAt(null);
+            session.setStatusBeforePause(null);
+            session.setQuestionDeadlineAt(null);
+            session.setFinalReport(session.getQuizId() == null ? null : buildFinalReport(session));
+            session.setUpdatedAt(Instant.now());
+
+            GameSessionResponse response = roomService.saveAndBroadcast(session);
+            roomRealtimeService.broadcastRoomEvent(session.getPin(), "LEADERBOARD_UPDATED", response.leaderboard());
+            roomRealtimeService.broadcastLeaderboard(session.getPin(), response.leaderboard());
+            if (response.finalReport() != null) {
+                roomRealtimeService.broadcastRoomEvent(session.getPin(), "FINAL_REPORT", response.finalReport());
+            }
+            return null;
+        });
+    }
+
     @PreDestroy
     void shutdownScheduler() {
         timerExecutor.shutdownNow();

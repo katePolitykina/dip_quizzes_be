@@ -98,6 +98,31 @@ class GameEngineIntegrationTest {
         assertEquals(2, roomService.loadSession(pin).getTeams().get(0).getHiddenAnswerIds().size());
     }
 
+    @Test
+    void hostCanEndActiveGameForAllPlayers() {
+        User hostUser = saveUser("host-end@example.com");
+        User captainUser = saveUser("captain-end@example.com");
+        User analystUser = saveUser("analyst-end@example.com");
+        Quiz quiz = saveQuiz(hostUser);
+
+        AuthenticatedUser host = authenticatedUser(hostUser, "Host");
+        AuthenticatedUser captain = authenticatedUser(captainUser, "Captain");
+        AuthenticatedUser analyst = authenticatedUser(analystUser, "Analyst");
+
+        String pin = roomService.createRoom(host, new CreateRoomRequest(30, true, true, 2)).pin();
+        roomService.joinRoom(pin, captain);
+        roomService.joinRoom(pin, analyst);
+        roomService.autoDistribute(pin, host, new AutoDistributeTeamsRequest(1));
+        gameLoopService.startGame(pin, host, new StartGameRequest(quiz.getId().toString(), null));
+
+        gameLoopService.endGame(pin, host);
+
+        var finished = roomService.loadSession(pin);
+        assertEquals(GameStatus.FINISHED, finished.getStatus());
+        assertNotNull(finished.getFinalReport());
+        assertNotNull(roomService.toResponse(finished).finalReport());
+    }
+
     private User saveUser(String email) {
         return userRepository.save(User.builder()
                 .email(email)

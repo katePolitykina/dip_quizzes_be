@@ -34,6 +34,10 @@ public class RoomMessageController {
             gameLoopService.togglePause(pin, authenticatedUser);
             return;
         }
+        if (request.command() == ModerationCommandRequest.ModerationCommand.END_GAME) {
+            gameLoopService.endGame(pin, authenticatedUser);
+            return;
+        }
         roomService.kickPlayer(pin, authenticatedUser, request.targetParticipantId());
     }
 
