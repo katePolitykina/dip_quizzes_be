@@ -121,6 +121,23 @@ public class RoomService {
         });
     }
 
+    public GameSessionResponse getRoom(String pin, AuthenticatedUser authenticatedUser) {
+        return executeLocked(pin, () -> {
+            if (authenticatedUser == null) {
+                throw new ApiException(HttpStatus.UNAUTHORIZED, "Missing authenticated user");
+            }
+            GameSession session = loadSession(pin);
+            String participantId = authenticatedUser.id().toString();
+            boolean isHost = session.getHostUserId().equals(participantId);
+            boolean isParticipant = session.getParticipants().stream()
+                    .anyMatch(player -> player.getParticipantId().equals(participantId));
+            if (!isHost && !isParticipant) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "You are not part of this room");
+            }
+            return toResponse(session);
+        });
+    }
+
     public GameSessionResponse autoDistribute(String pin, AuthenticatedUser authenticatedUser, AutoDistributeTeamsRequest request) {
         return executeLocked(pin, () -> {
             GameSession session = loadSession(pin);

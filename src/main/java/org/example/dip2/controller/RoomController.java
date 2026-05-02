@@ -9,6 +9,7 @@ import org.example.dip2.dto.room.UpdateTeamsRequest;
 import org.example.dip2.dto.room.UpdateTeamRolesRequest;
 import org.example.dip2.security.AuthenticatedUser;
 import org.example.dip2.service.RoomService;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -41,6 +42,14 @@ public class RoomController {
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser
     ) {
         return roomService.joinRoom(pin, authenticatedUser);
+    }
+
+    @GetMapping("/{pin}")
+    public GameSessionResponse getRoom(
+            @PathVariable String pin,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        return roomService.getRoom(pin, authenticatedUser);
     }
 
     @PostMapping("/{pin}/teams/auto-distribute")
