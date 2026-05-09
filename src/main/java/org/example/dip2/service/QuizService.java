@@ -94,10 +94,10 @@ public class QuizService {
         for (int questionIndex = 0; questionIndex < request.questions().size(); questionIndex++) {
             QuizQuestionRequest question = request.questions().get(questionIndex);
             List<QuizAnswerRequest> answers = question.answers();
-            if (answers.size() < 2 || answers.size() > 4) {
+            if (answers.isEmpty() || answers.size() > 4) {
                 throw new ApiException(
                         HttpStatus.BAD_REQUEST,
-                        "Question " + (questionIndex + 1) + " must contain between 2 and 4 answers"
+                        "Question " + (questionIndex + 1) + " must contain between 1 and 4 answers"
                 );
             }
             boolean hasCorrectAnswer = answers.stream().anyMatch(QuizAnswerRequest::isCorrect);
