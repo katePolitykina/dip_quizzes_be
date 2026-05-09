@@ -471,6 +471,7 @@ public class RoomService {
                         player.getTeamId(),
                         player.getTeamRole() == null ? null : player.getTeamRole().name(),
                         player.getSelectedAnswerId(),
+                        resolveSelectedAnswerCorrect(session, player),
                         player.getQuestionAnswers().stream()
                                 .map(answer -> new PlayerQuestionAnswerResponse(
                                         answer.getQuestionId(),
@@ -507,6 +508,27 @@ public class RoomService {
         }
         return session.getQuestions().get(session.getCurrentQuestionIndex()).getAnswers().stream()
                 .filter(answer -> answer.getId().equals(team.getConfirmedAnswerId()))
+                .findFirst()
+                .map(QuestionAnswerState::isCorrect)
+                .orElse(null);
+    }
+
+    private Boolean resolveSelectedAnswerCorrect(GameSession session, PlayerSlot player) {
+        if (player.getSelectedAnswerId() == null || player.getTeamId() == null) {
+            return null;
+        }
+        TeamState team = session.getTeams().stream()
+                .filter(candidate -> candidate.getTeamId().equals(player.getTeamId()))
+                .findFirst()
+                .orElse(null);
+        if (team == null || team.getConfirmedAnswerId() == null || session.getCurrentQuestionIndex() == null || session.getQuestions() == null) {
+            return null;
+        }
+        if (session.getCurrentQuestionIndex() < 0 || session.getCurrentQuestionIndex() >= session.getQuestions().size()) {
+            return null;
+        }
+        return session.getQuestions().get(session.getCurrentQuestionIndex()).getAnswers().stream()
+                .filter(answer -> answer.getId().equals(player.getSelectedAnswerId()))
                 .findFirst()
                 .map(QuestionAnswerState::isCorrect)
                 .orElse(null);

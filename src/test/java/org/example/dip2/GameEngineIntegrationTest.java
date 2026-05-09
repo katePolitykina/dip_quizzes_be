@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import org.example.dip2.model.Answer;
@@ -175,6 +176,56 @@ class GameEngineIntegrationTest {
 
         assertThrows(ApiException.class, () -> gameLoopService.useSortAnswers(pin, teamId, analyst));
         assertEquals(2, roomService.loadSession(pin).getTeams().get(0).getHiddenAnswerIds().size());
+    }
+
+    @Test
+    void playersCanSeeWhetherTheirOwnSelectedAnswerWasCorrectAfterCaptainConfirms() {
+        User hostUser = saveUser("host-member-answer@example.com");
+        User captainUser = saveUser("captain-member-answer@example.com");
+        User analystUser = saveUser("analyst-member-answer@example.com");
+        Quiz quiz = saveQuiz(hostUser);
+
+        AuthenticatedUser host = authenticatedUser(hostUser, "Host");
+        AuthenticatedUser captain = authenticatedUser(captainUser, "Captain");
+        AuthenticatedUser analyst = authenticatedUser(analystUser, "Analyst");
+
+        String pin = roomService.createRoom(host, new CreateRoomRequest(30, true, true, 2)).pin();
+        roomService.joinRoom(pin, captain);
+        roomService.joinRoom(pin, analyst);
+        roomService.autoDistribute(pin, host, new AutoDistributeTeamsRequest(1));
+        gameLoopService.startGame(pin, host, new StartGameRequest(quiz.getId().toString(), null));
+
+        var session = roomService.loadSession(pin);
+        String teamId = session.getTeams().get(0).getTeamId();
+        String correctAnswerId = session.getQuestions().get(0).getAnswers().stream()
+                .filter(answer -> answer.isCorrect())
+                .findFirst()
+                .orElseThrow()
+                .getId();
+        String wrongAnswerId = session.getQuestions().get(0).getAnswers().stream()
+                .filter(answer -> !answer.isCorrect())
+                .findFirst()
+                .orElseThrow()
+                .getId();
+
+        gameLoopService.selectTeamAnswer(pin, teamId, analyst, correctAnswerId);
+        gameLoopService.selectTeamAnswer(pin, teamId, captain, wrongAnswerId);
+        gameLoopService.confirmTeamAnswer(pin, teamId, captain, wrongAnswerId, "HIGH");
+
+        var response = roomService.toResponse(roomService.loadSession(pin));
+        var analystResponse = response.participants().stream()
+                .filter(player -> player.participantId().equals(analystUser.getId().toString()))
+                .findFirst()
+                .orElseThrow();
+        var captainResponse = response.participants().stream()
+                .filter(player -> player.participantId().equals(captainUser.getId().toString()))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(correctAnswerId, analystResponse.selectedAnswerId());
+        assertTrue(Boolean.TRUE.equals(analystResponse.selectedAnswerCorrect()));
+        assertEquals(wrongAnswerId, captainResponse.selectedAnswerId());
+        assertTrue(Boolean.FALSE.equals(captainResponse.selectedAnswerCorrect()));
     }
 
     @Test

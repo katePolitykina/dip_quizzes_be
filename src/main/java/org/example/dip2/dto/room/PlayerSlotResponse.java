@@ -10,6 +10,7 @@ public record PlayerSlotResponse(
         String teamId,
         String teamRole,
         String selectedAnswerId,
+        Boolean selectedAnswerCorrect,
         java.util.List<PlayerQuestionAnswerResponse> questionAnswers
 ) {
 }
