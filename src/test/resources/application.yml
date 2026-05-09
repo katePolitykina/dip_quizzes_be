@@ -25,6 +25,8 @@ app:
     secret: 12345678901234567890123456789012
     access-token-expiration: PT2H
     guest-token-expiration: PT30M
+  storage:
+    uploads-dir: /tmp/dip2-test-uploads
   rooms:
     ttl: PT2H
     pin-length: 6

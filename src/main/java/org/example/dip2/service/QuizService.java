@@ -1,6 +1,7 @@
 package org.example.dip2.service;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.example.dip2.dto.quiz.QuizAnswerRequest;
 import org.example.dip2.dto.quiz.QuizAnswerResponse;
@@ -26,10 +27,16 @@ public class QuizService {
 
     private final QuizRepository quizRepository;
     private final UserRepository userRepository;
+    private final QuizImageStorageService quizImageStorageService;
 
-    public QuizService(QuizRepository quizRepository, UserRepository userRepository) {
+    public QuizService(
+            QuizRepository quizRepository,
+            UserRepository userRepository,
+            QuizImageStorageService quizImageStorageService
+    ) {
         this.quizRepository = quizRepository;
         this.userRepository = userRepository;
+        this.quizImageStorageService = quizImageStorageService;
     }
 
     @Transactional
@@ -69,15 +76,20 @@ public class QuizService {
     public QuizDetailResponse updateQuiz(AuthenticatedUser authenticatedUser, UUID quizId, QuizUpsertRequest request) {
         validateQuestionStructure(request);
         Quiz quiz = loadOwnedQuiz(authenticatedUser.id(), quizId);
+        Set<String> previousImagePaths = quizImageStorageService.collectManagedPaths(quiz);
         quiz.setTitle(request.title().trim());
         quiz.replaceQuestions(mapQuestions(request.questions()));
-        return toDetailResponse(quizRepository.saveAndFlush(quiz));
+        Quiz savedQuiz = quizRepository.saveAndFlush(quiz);
+        deleteUnusedImages(previousImagePaths, savedQuiz);
+        return toDetailResponse(savedQuiz);
     }
 
     @Transactional
     public void deleteQuiz(AuthenticatedUser authenticatedUser, UUID quizId) {
         Quiz quiz = loadOwnedQuiz(authenticatedUser.id(), quizId);
+        Set<String> imagePaths = quizImageStorageService.collectManagedPaths(quiz);
         quizRepository.delete(quiz);
+        quizImageStorageService.deleteAll(imagePaths);
     }
 
     private User loadAuthor(UUID id) {
@@ -119,7 +131,7 @@ public class QuizService {
     private Question mapQuestion(QuizQuestionRequest request) {
         Question question = Question.builder()
                 .text(request.text().trim())
-                .imageUrl(normalizeOptional(request.imageUrl()))
+                .imageUrl(prepareImageUrl(request.imageUrl()))
                 .pointsWeight(request.pointsWeight())
                 .timerOverride(request.timerOverride())
                 .build();
@@ -166,5 +178,16 @@ public class QuizService {
 
     private String normalizeOptional(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private String prepareImageUrl(String imageUrl) {
+        String normalized = normalizeOptional(imageUrl);
+        return normalized == null ? null : quizImageStorageService.normalizeAndStore(normalized);
+    }
+
+    private void deleteUnusedImages(Set<String> previousImagePaths, Quiz savedQuiz) {
+        Set<String> currentImagePaths = quizImageStorageService.collectManagedPaths(savedQuiz);
+        previousImagePaths.removeAll(currentImagePaths);
+        quizImageStorageService.deleteAll(previousImagePaths);
     }
 }

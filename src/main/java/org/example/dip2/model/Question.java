@@ -43,6 +43,7 @@ public class Question {
     @Column(nullable = false, columnDefinition = "text")
     private String text;
 
+    @Column(columnDefinition = "text")
     private String imageUrl;
 
     @Column(nullable = false)

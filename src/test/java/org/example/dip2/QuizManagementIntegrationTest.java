@@ -73,6 +73,46 @@ class QuizManagementIntegrationTest {
     }
 
     @Test
+    void userCanUpdateQuizWithLongImageDataAndSingleAnswerQuestion() throws Exception {
+        String token = registerUserAndGetToken("quiz-image@example.com");
+
+        MvcResult createResult = mockMvc.perform(post("/api/quizzes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validQuizPayload("Image Quiz")))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String quizId = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("id").asText();
+        String longImageUrl = "data:image/png;base64," + "A".repeat(5000);
+
+        mockMvc.perform(put("/api/quizzes/{id}", quizId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Image Quiz Updated",
+                                  "questions": [
+                                    {
+                                      "text": "Question with image",
+                                      "imageUrl": "%s",
+                                      "pointsWeight": 10,
+                                      "timerOverride": 60,
+                                      "answers": [
+                                        { "text": "Only one", "isCorrect": true }
+                                      ]
+                                    }
+                                  ]
+                                }
+                                """.formatted(longImageUrl)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Image Quiz Updated"))
+                .andExpect(jsonPath("$.questions[0].imageUrl").value(longImageUrl))
+                .andExpect(jsonPath("$.questions[0].answers.length()").value(1))
+                .andExpect(jsonPath("$.questions[0].answers[0].text").value("Only one"));
+    }
+
+    @Test
     void guestCannotAccessQuizEndpoints() throws Exception {
         String token = issueGuestToken();
 

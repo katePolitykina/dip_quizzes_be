@@ -57,6 +57,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/users/me").hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/users/me").hasRole("USER")
                         .requestMatchers("/api/quizzes/**").hasRole("USER")
