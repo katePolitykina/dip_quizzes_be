@@ -11,7 +11,10 @@ import org.springframework.stereotype.Component;
 
 @Component
 @ConditionalOnProperty(name = "app.rooms.store", havingValue = "memory")
-public class InMemoryGameSessionStore implements GameSessionStore {
+public class
+
+
+InMemoryGameSessionStore implements GameSessionStore {
 
     private final Map<String, GameSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, Object> locks = new ConcurrentHashMap<>();
