@@ -8,9 +8,14 @@ import org.example.dip2.dto.room.GameSessionResponse;
 import org.example.dip2.dto.room.UpdateTeamsRequest;
 import org.example.dip2.dto.room.UpdateTeamRolesRequest;
 import org.example.dip2.security.AuthenticatedUser;
+import org.example.dip2.service.FinalReportExportService;
 import org.example.dip2.service.RoomService;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,6 +32,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 public class RoomController {
 
     private final RoomService roomService;
+    private final FinalReportExportService finalReportExportService;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -51,6 +57,22 @@ public class RoomController {
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser
     ) {
         return roomService.getRoom(pin, authenticatedUser);
+    }
+
+    @GetMapping("/{pin}/final-report.xlsx")
+    public ResponseEntity<byte[]> downloadFinalReport(
+            @PathVariable String pin,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        byte[] workbook = finalReportExportService.export(roomService.getFinalReport(pin, authenticatedUser));
+        String normalizedPin = pin.toUpperCase();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(normalizedPin + "-detailed-result.xlsx")
+                        .build()
+                        .toString())
+                .body(workbook);
     }
 
     @DeleteMapping("/{pin}/leave")

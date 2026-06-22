@@ -131,14 +131,20 @@ public class RoomService {
                 throw new ApiException(HttpStatus.UNAUTHORIZED, "Missing authenticated user");
             }
             GameSession session = loadSession(pin);
-            String participantId = authenticatedUser.id().toString();
-            boolean isHost = session.getHostUserId().equals(participantId);
-            boolean isParticipant = session.getParticipants().stream()
-                    .anyMatch(player -> player.getParticipantId().equals(participantId));
-            if (!isHost && !isParticipant) {
-                throw new ApiException(HttpStatus.FORBIDDEN, "You are not part of this room");
-            }
+            ensureRoomMember(session, authenticatedUser);
             return toResponse(session);
+        });
+    }
+
+    public FinalGameReportResponse getFinalReport(String pin, AuthenticatedUser authenticatedUser) {
+        return executeLocked(pin, () -> {
+            GameSession session = loadSession(pin);
+            ensureRoomMember(session, authenticatedUser);
+            FinalGameReportResponse finalReport = toFinalReportResponse(session.getFinalReport());
+            if (finalReport == null) {
+                throw new ApiException(HttpStatus.CONFLICT, "Final report is not available yet");
+            }
+            return finalReport;
         });
     }
 
@@ -405,6 +411,19 @@ public class RoomService {
     public void ensureHost(GameSession session, AuthenticatedUser authenticatedUser) {
         if (!session.getHostUserId().equals(authenticatedUser.id().toString())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "Only the room host can manage this session");
+        }
+    }
+
+    public void ensureRoomMember(GameSession session, AuthenticatedUser authenticatedUser) {
+        if (authenticatedUser == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Missing authenticated user");
+        }
+        String participantId = authenticatedUser.id().toString();
+        boolean isHost = session.getHostUserId().equals(participantId);
+        boolean isParticipant = session.getParticipants().stream()
+                .anyMatch(player -> player.getParticipantId().equals(participantId));
+        if (!isHost && !isParticipant) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "You are not part of this room");
         }
     }
 
